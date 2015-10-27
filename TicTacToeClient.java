@@ -1,10 +1,13 @@
 // Fig. 18.9: TicTacToeClient.java
 // Client that let a user play Tic-Tac-Toe with another across a network.
-import java.awt.*;
-import java.awt.event.*;
-import java.net.*;
-import java.io.*;
 import javax.swing.*;
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.net.Socket;
 
 public class TicTacToeClient extends JApplet implements Runnable {
    private JTextField idField;
@@ -22,7 +25,7 @@ public class TicTacToeClient extends JApplet implements Runnable {
    public void init()
    {
       Container container = getContentPane();
- 
+
       // set up JTextArea to display messages to user
       displayArea = new JTextArea( 4, 30 );
       displayArea.setEditable( false );
@@ -45,7 +48,7 @@ public class TicTacToeClient extends JApplet implements Runnable {
 
             // create Square
             board[ row ][ column ] = new Square( ' ', row * 3 + column );
-            boardPanel.add( board[ row ][ column ] );        
+            boardPanel.add( board[ row ][ column ] );
          }
       }
 
@@ -53,7 +56,7 @@ public class TicTacToeClient extends JApplet implements Runnable {
       idField = new JTextField();
       idField.setEditable( false );
       container.add( idField, BorderLayout.NORTH );
-      
+
       // set up panel to contain boardPanel (for layout purposes)
       panel2 = new JPanel();
       panel2.add( boardPanel, BorderLayout.CENTER );
@@ -68,7 +71,7 @@ public class TicTacToeClient extends JApplet implements Runnable {
    {
       // connect to server, get streams and start outputThread
       try {
-         
+
          // make connection
          connection = new Socket( getCodeBase().getHost(), 12345 );
 
@@ -79,7 +82,7 @@ public class TicTacToeClient extends JApplet implements Runnable {
 
       // catch problems setting up connection and streams
       catch ( IOException ioException ) {
-         ioException.printStackTrace();         
+         ioException.printStackTrace();
       }
 
       // create and start output thread
@@ -96,15 +99,15 @@ public class TicTacToeClient extends JApplet implements Runnable {
          myMark = input.readChar();
 
          // display player ID in event-dispatch thread
-         SwingUtilities.invokeLater( 
-            new Runnable() {         
-               public void run()
-               {
-                  idField.setText( "You are player \"" + myMark + "\"" );
-               }
-            }
-         ); 
-         
+         SwingUtilities.invokeLater(
+                 new Runnable() {
+                    public void run()
+                    {
+                       idField.setText( "You are player \"" + myMark + "\"" );
+                    }
+                 }
+         );
+
          myTurn = ( myMark == X_MARK ? true : false );
 
          // receive messages sent to client and output them
@@ -116,7 +119,7 @@ public class TicTacToeClient extends JApplet implements Runnable {
 
       // process problems communicating with server
       catch ( IOException ioException ) {
-         ioException.printStackTrace();         
+         ioException.printStackTrace();
       }
 
    }  // end method run
@@ -145,8 +148,8 @@ public class TicTacToeClient extends JApplet implements Runnable {
             int row = location / 3;
             int column = location % 3;
 
-            setMark(  board[ row ][ column ], 
-               ( myMark == X_MARK ? O_MARK : X_MARK ) );                  
+            setMark(  board[ row ][ column ],
+                    ( myMark == X_MARK ? O_MARK : X_MARK ) );
             displayMessage( "Opponent moved. Your turn.\n" );
             myTurn = true;
 
@@ -154,10 +157,29 @@ public class TicTacToeClient extends JApplet implements Runnable {
 
          // process problems communicating with server
          catch ( IOException ioException ) {
-            ioException.printStackTrace();         
+            ioException.printStackTrace();
          }
 
       } // end else if
+      else if(message.equals("Player X is Winner") || message.equals("Player O is Winner")){
+         // get move location and update board
+         try {
+            int location = input.readInt();
+            int row = location / 3;
+            int column = location % 3;
+
+            setMark(  board[ row ][ column ],
+                    ( myMark == X_MARK ? O_MARK : X_MARK ) );
+            displayMessage( message + "\n" );
+
+
+         } // end try
+
+         // process problems communicating with server
+         catch ( IOException ioException ) {
+            ioException.printStackTrace();
+         }
+      }
 
       // simply display message
       else
@@ -171,16 +193,16 @@ public class TicTacToeClient extends JApplet implements Runnable {
    {
       // display message from event-dispatch thread of execution
       SwingUtilities.invokeLater(
-         new Runnable() {  // inner class to ensure GUI updates properly
+              new Runnable() {  // inner class to ensure GUI updates properly
 
-            public void run() // updates displayArea
-            {
-               displayArea.append( messageToDisplay );
-               displayArea.setCaretPosition( 
-                  displayArea.getText().length() );
-            }
+                 public void run() // updates displayArea
+                 {
+                    displayArea.append( messageToDisplay );
+                    displayArea.setCaretPosition(
+                            displayArea.getText().length() );
+                 }
 
-         }  // end inner class
+              }  // end inner class
 
       ); // end call to SwingUtilities.invokeLater
    }
@@ -189,13 +211,13 @@ public class TicTacToeClient extends JApplet implements Runnable {
    private void setMark( final Square squareToMark, final char mark )
    {
       SwingUtilities.invokeLater(
-         new Runnable() {
-            public void run()
-            {
-               squareToMark.setMark( mark );
-            }
-         }
-      ); 
+              new Runnable() {
+                 public void run()
+                 {
+                    squareToMark.setMark( mark );
+                 }
+              }
+      );
    }
 
    // send message to server indicating clicked square
@@ -226,60 +248,60 @@ public class TicTacToeClient extends JApplet implements Runnable {
    private class Square extends JPanel {
       private char mark;
       private int location;
-   
+
       public Square( char squareMark, int squareLocation )
       {
          mark = squareMark;
          location = squareLocation;
 
-         addMouseListener( 
-            new MouseAdapter() {
-               public void mouseReleased( MouseEvent e )
-               {
-                  setCurrentSquare( Square.this );
-                  sendClickedSquare( getSquareLocation() );
-               }
-            }  
-         ); 
+         addMouseListener(
+                 new MouseAdapter() {
+                    public void mouseReleased( MouseEvent e )
+                    {
+                       setCurrentSquare( Square.this );
+                       sendClickedSquare( getSquareLocation() );
+                    }
+                 }
+         );
 
       } // end Square constructor
 
       // return preferred size of Square
-      public Dimension getPreferredSize() 
-      { 
+      public Dimension getPreferredSize()
+      {
          return new Dimension( 30, 30 );
       }
 
       // return minimum size of Square
-      public Dimension getMinimumSize() 
+      public Dimension getMinimumSize()
       {
          return getPreferredSize();
       }
 
       // set mark for Square
-      public void setMark( char newMark ) 
-      { 
-         mark = newMark; 
-         repaint(); 
-      }
-   
-      // return Square location
-      public int getSquareLocation() 
+      public void setMark( char newMark )
       {
-         return location; 
+         mark = newMark;
+         repaint();
       }
-   
+
+      // return Square location
+      public int getSquareLocation()
+      {
+         return location;
+      }
+
       // draw Square
       public void paintComponent( Graphics g )
       {
          super.paintComponent( g );
 
          g.drawRect( 0, 0, 29, 29 );
-         g.drawString( String.valueOf( mark ), 11, 20 );   
+         g.drawString( String.valueOf( mark ), 11, 20 );
       }
 
    } // end inner-class Square
- 
+
 } // end class TicTacToeClient
 
 /**************************************************************************
