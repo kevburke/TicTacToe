@@ -1,5 +1,6 @@
 // Fig. 18.8: TicTacToeServer.java
 // This class maintains a game of Tic-Tac-Toe for two client applets.'''''''''''''''''''''
+
 import javax.swing.*;
 import java.awt.*;
 import java.io.DataInputStream;
@@ -7,18 +8,26 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class TicTacToeServer extends JFrame {
-   private char[] board;
-   private JTextArea outputArea;
-   private Player[] players;
+   private char[] board;                           //board array
+   private JTextArea outputArea;                   //area to output info
+   private Player[] players;                       //player array of 2
    private ServerSocket server;
-   private int currentPlayer;
-   private final int PLAYER_X = 0, PLAYER_O = 1;
-   private final char X_MARK = 'X', O_MARK = 'O';
-   private char WinResult;
-
+   private int currentPlayer;                      //variable for switching players
+   private final int PLAYER_X = 0, PLAYER_O = 1;   //2 players
+   private final char X_MARK = 'X', O_MARK = 'O';  //marks on board
+   private char WinResult = ' ';                   //flag to declare winner
+   private int count=0;                            //counter to test number of moves
+   private boolean done = false;                   //
    // set up tic-tac-toe server and GUI that displays messages
+
+   ExecutorService TicTac = Executors.newFixedThreadPool(2);
+   private static final Logger logger = Logger.getLogger("logs");
    public TicTacToeServer()
    {
       super( "Tic-Tac-Toe Server" );
@@ -35,9 +44,9 @@ public class TicTacToeServer extends JFrame {
       // process problems creating ServerSocket
       catch( IOException ioException ) {
          ioException.printStackTrace();
+         logger.log(Level.INFO, "server Socket error");
          System.exit( 1 );
       }
-
       // set up JTextArea to display messages during execution
       outputArea = new JTextArea();
       getContentPane().add( outputArea, BorderLayout.CENTER );    //Jtext area on server side
@@ -51,28 +60,33 @@ public class TicTacToeServer extends JFrame {
    // wait for two connections so game can be played
    public void execute()
    {
-      // wait for each client to connect
-      for ( int i = 0; i < players.length; i++ ) {
+      TicTac.execute(new Runnable() {              //executor framework execute
+                        @Override
+                        public void run() {
+                           // wait for each client to connect
+                           for ( int i = 0; i < players.length; i++ ) {
 
-         // wait for connection, create Player, start thread
-         try {
-            players[ i ] = new Player( server.accept(), i );//on first connection 1 thread started
-            players[ i ].start();
-         }
+                              // wait for connection, create Player, start thread
+                              try {
+                                 players[ i ] = new Player( server.accept(), i );//on first connection 1 thread started
+                                 players[ i ].start();      //call start on client X
+                              }
 
-         // process problems receiving connection from client
-         catch( IOException ioException ) {
-            ioException.printStackTrace();
-            System.exit( 1 );
-         }
-      }
-
-      // Player X is suspended until Player O connects. 
-      // Resume player X now.          
-      synchronized ( players[ PLAYER_X ] ) {
-         players[ PLAYER_X ].setSuspended( false );
-         players[ PLAYER_X ].notify();
-      }
+                              // process problems receiving connection from client
+                              catch( IOException ioException ) {
+                                 ioException.printStackTrace();
+                                 System.exit( 1 );
+                              }
+                           }
+                           // Player X is suspended until Player O connects.
+                           // Resume player X now.
+                           synchronized ( players[ PLAYER_X ] ) {
+                              players[ PLAYER_X ].setSuspended( false );
+                              players[ PLAYER_X ].notify();
+                           }
+                        }
+                     }
+      );
 
    }  // end method execute
 
@@ -90,9 +104,7 @@ public class TicTacToeServer extends JFrame {
                     outputArea.setCaretPosition(
                             outputArea.getText().length() );
                  }
-
               }  // end inner class
-
       ); // end call to SwingUtilities.invokeLater
    }
 
@@ -100,9 +112,6 @@ public class TicTacToeServer extends JFrame {
    // only one move can be made at a time.
    public synchronized boolean validateAndMove( int location, int player )
    {
-
-      boolean moveDone = false;
-
       // while not current player, must wait for turn
       while ( player != currentPlayer ) {
 
@@ -116,10 +125,9 @@ public class TicTacToeServer extends JFrame {
             interruptedException.printStackTrace();
          }
       }
-
       // if location not occupied, make move
       if ( !isOccupied( location ) ) {
-
+         count++;                      //increment counter on valid move
          // set move in board array
          board[ location ] = currentPlayer == PLAYER_X ? X_MARK : O_MARK;
 
@@ -153,46 +161,50 @@ public class TicTacToeServer extends JFrame {
    // place code in this method to determine whether game over 
    public synchronized boolean isGameOver()
    {
-      if (WinResult == '\0') {
-         for (int i = 0; i < board.length; i += 3) {     //need 3 to move to next row probably a better way of this
-            if (board[0 + i] == 'X' && board[1 + i] == 'X' && board[2 + i] == 'X') {
-               WinResult = 'X';
+      if (WinResult == ' ') {
+         for (int i = 0; i < board.length; i += 3) {                                //need +3 to move to next row
+            if (board[0 + i] == 'X' && board[1 + i] == 'X' && board[2 + i] == 'X') {//check combination
+               WinResult = 'X';                                                     //winner is X
                return true;
-            } else if (board[0 + i] == 'O' && board[1 + i] == 'O' && board[2 + i] == 'O') {
-               WinResult = 'O';
+            } else if (board[0 + i] == 'O' && board[1 + i] == 'O' && board[2 + i] == 'O') {//check combination
+               WinResult = 'O';                                                     //winner is O
                return true;
             }
          }
          for (int x = 0; x < 3; x++) {
-            if (board[0 + x] == 'X' && board[3 + x] == 'X' && board[6 + x] == 'X') {
-               WinResult = 'X';
+            if (board[0 + x] == 'X' && board[3 + x] == 'X' && board[6 + x] == 'X') {//check combination
+               WinResult = 'X';                                                     //winner is X
                return true;
-            } else if (board[0 + x] == 'O' && board[3 + x] == 'O' && board[6 + x] == 'O') {
-               WinResult = 'O';
+            } else if (board[0 + x] == 'O' && board[3 + x] == 'O' && board[6 + x] == 'O') {//check combination
+               WinResult = 'O';                                                      //winner is O
                return true;
             }
          }
-         if (board[0 ] == 'X' && board[4] == 'X' && board[8] == 'X') {
-            WinResult = 'X';
+         if (board[0 ] == 'X' && board[4] == 'X' && board[8] == 'X') {              //check combination
+            WinResult = 'X';                                                        //winner is X
             return true;
          }
-         if (board[2] == 'X' && board[4] == 'X' && board[6] == 'X') {
-            WinResult = 'X';
+         if (board[2] == 'X' && board[4] == 'X' && board[6] == 'X') {               //check combination
+            WinResult = 'X';                                                        //winner is X
             return true;
          }
          if (board[0 ] == 'O' && board[4] == 'O' && board[8] == 'O') {
-            WinResult = 'O';
+            WinResult = 'O';                                                        //winner is O
             return true;
          }
-         else if (board[2] == 'O' && board[4] == 'O' && board[6] == 'O') {
-            WinResult = 'O';
+         if (board[2] == 'O' && board[4] == 'O' && board[6] == 'O') {               //check combination
+            WinResult = 'O';                                                        //winner is O
+            return true;
+         }
+         else if (count==9){                                                        //9 moves validated
+            WinResult= 'A';                                                         //no Winner
             return true;
          }
       }
-      //else
-      //return true;
+      else
+         return true;
 
-      return false;  // this is left as an exercise
+      return false;
    }
 
    public static void main( String args[] )
@@ -232,7 +244,6 @@ public class TicTacToeServer extends JFrame {
             ioException.printStackTrace();
             System.exit(1);
          }
-
       } // end Player constructor
 
       // send message that other player moved
@@ -242,100 +253,136 @@ public class TicTacToeServer extends JFrame {
          try {
             if(isGameOver())           //if game is over send other player message that player won
             {
-               output.writeUTF("Player" + " " + WinResult + " is Winner");
-               output.writeInt(location);
+               if(WinResult=='A'){    //
+                  output.writeUTF("Draw Game");
+                  count=0;
+                  output.writeInt(location);
+               }
+               else {
+                  output.writeUTF("Player" + " " + WinResult + " is Winner");
+                  output.writeInt(location);
+               }
             }
             else {
                output.writeUTF("Opponent moved");
                output.writeInt(location);
             }
          }
-
          // process problems sending message
          catch ( IOException ioException ) {
             ioException.printStackTrace();
          }
       }
+      private void processMessage( String message )
+      {
+         // valid move occurred
+         if (message.equalsIgnoreCase("newGame")) {
+            //currentPlayer = ( currentPlayer + 1 ) % 2;
+            WinResult= ' ';
+            count = 0;
+            for (int ii = 0; ii < board.length; ii++) {
 
+               board[ii] =' ';
+            }
+
+            // let new current player know that move occurred
+            try {
+               players[currentPlayer].output.writeUTF("reSet");
+            } catch (IOException e) {
+               e.printStackTrace();
+            }
+            //isGameOver();
+         }
+      } // end method processMessage
       // control thread's execution
       public void run()
       {
          // send client message indicating its mark (X or O),
          // process messages from client
          try {
-            displayMessage( "Player " + ( playerNumber ==
-                    PLAYER_X ? X_MARK : O_MARK ) + " connected\n" );
+            displayMessage("Player " + (playerNumber ==
+                    PLAYER_X ? X_MARK : O_MARK) + " connected\n");
 
-            output.writeChar( mark ); // send player's mark
+            output.writeChar(mark); // send player's mark
 
             // send message indicating connection
-            output.writeUTF( "Player " + ( playerNumber == PLAYER_X ?
-                    "X connected\n" : "O connected, please wait\n" ) );
+            output.writeUTF("Player " + (playerNumber == PLAYER_X ?
+                    "X connected\n" : "O connected, please wait\n"));
 
             // if player X, wait for another player to arrive
-            if ( mark == X_MARK ) {
-               output.writeUTF( "Waiting for another player" );
+            if (mark == X_MARK) {
+               output.writeUTF("Waiting for another player");
 
                // wait for player O
                try {
-                  synchronized( this ) {
-                     while ( suspended )
+                  synchronized (this) {
+                     while (suspended)
                         wait();
                   }
                }
 
                // process interruptions while waiting
-               catch ( InterruptedException exception ) {
+               catch (InterruptedException exception) {
                   exception.printStackTrace();
                }
 
                // send message that other player connected and
                // player X can make a move
-               output.writeUTF( "Other player connected. Your move." );
+               output.writeUTF("Other player connected. Your move.");
             }
 
             // while game not over
-            while ( ! isGameOver() ) {
+            //String message;
+            while (true) {
+               while (!isGameOver()) {
 
-               // get move location from client
-               int location = input.readInt();
+                  // get move location from client
+                  int location = input.readInt();
 
-               // check for valid move
+                  // check for valid move
 
-               if (validateAndMove(location, playerNumber)) {
-                  displayMessage("\nlocation: " + location);
-                  // if(WinResult != '\0')
-                  // {
-                  //    output.writeUTF("You Win. Congrats");
-                  // }
-                  // else
-                  output.writeUTF("Valid move.");
-               } else
-                  output.writeUTF("Invalid move, try again");
+                  if (validateAndMove(location, playerNumber)) {
+                     displayMessage("\nlocation: " + location);
+
+                     output.writeUTF("Valid move.");
+                  } else
+                     output.writeUTF("Invalid move, try again");
+               }
+               if (isGameOver()) {
+                  if (WinResult == 'X' || WinResult == 'O') {
+                     output.writeUTF("You Win. Congrats");
+
+                  } else if (WinResult == 'A') {
+
+                     output.writeUTF("Draw Game");
+                  }
+               }
+               done=false;
+               while (done==false) {
+
+                  if (input.available() > 0) {
+                     processMessage(input.readUTF());
+                     done=true;
+                  }
+               }
             }
-            // if(isGameOver()) {
-            // output.writeUTF("Player" + " " + WinResult + " is Winner");
-            //}
-            connection.close(); // close connection to client
-
-         } // end try
+         }// end try
 
          // process problems communicating with client
-         catch( IOException ioException ) {
+         catch(IOException ioException){
             ioException.printStackTrace();
-            System.exit( 1 );
+            System.exit(1);
          }
 
       } // end method run
 
       // set whether or not thread is suspended
+
       public void setSuspended( boolean status )
       {
          suspended = status;
       }
-
    } // end class Player
-   /////dffhghjhk
 } // end class TicTacToeServer
 
 /**************************************************************************
